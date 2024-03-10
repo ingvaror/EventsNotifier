@@ -2,7 +2,13 @@ package ru.ingvaror.eventsnotifier;
 
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
-import org.springframework.web.reactive.function.client.WebClient;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -12,13 +18,14 @@ import java.util.stream.Collectors;
 
 public class WatchUpdates extends Thread {
 
+    public static String NOTIFY_IMAGES_UPDATE = "images";
     private boolean stopped = false;
-    private String URL;
+    private String url;
     private List<String> imageUrls = new ArrayList<>();
     private PropertyChangeListener listener;
 
-    public WatchUpdates(String URL) {
-        this.URL = URL;
+    public WatchUpdates(String url) {
+        this.url = url;
     }
 
     public void subscribeOnUpdateContent(PropertyChangeListener listener) {
@@ -26,34 +33,42 @@ public class WatchUpdates extends Thread {
     }
 
     public String getURL() {
-        return URL;
+        return url;
     }
 
     public void stopWatch() {
         this.stopped = true;
     }
 
-
-
     public void run() {
         while (!stopped) {
             try {
-                final WebClient webClient = WebClient.create(URL);
-                final String webpageContent = webClient.get()
-                        .retrieve()
-                        .bodyToMono(String.class)
-                        .block();
-
+                StringBuilder webpageContent = new StringBuilder();
+                URL url_ = new URL(url);
+                HttpURLConnection urlConnection = (HttpURLConnection) url_.openConnection();
+                try {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        webpageContent.append(line).append("\n");
+                    }
+                } finally {
+                    urlConnection.disconnect();
+                }
                 // Fetch and process the webpage content
-                final List<String> newImageUrls = extractImageUrls(webpageContent);
+                final List<String> newImageUrls = extractImageUrls(webpageContent.toString());
                 if (imageUrls != null
                         && imageUrls.retainAll(newImageUrls)
                         && imageUrls.size() != newImageUrls.size()) {
-                    listener.propertyChange(new PropertyChangeEvent(imageUrls, "images", imageUrls, newImageUrls));
+                    listener.propertyChange(new PropertyChangeEvent(imageUrls, NOTIFY_IMAGES_UPDATE, imageUrls, newImageUrls));
                 }
                 imageUrls = newImageUrls;
-                Thread.sleep(10000);
+                Thread.sleep(15000);
             } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }

@@ -21,18 +21,18 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
 
-import ru.ingvaror.eventsnotifier.*;
+import static ru.ingvaror.eventsnotifier.WatchUpdates.NOTIFY_IMAGES_UPDATE;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
     private static final String CHANNEL_ID = "events_notifier";
     private EditText editorURL;
     private List<WatchUpdates> watchers;
+    private DBHelper dbHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,8 +50,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         editorURL = findViewById(R.id.editorURL);
         Button creatorSnapshot = findViewById(R.id.creatorShapshot);
         creatorSnapshot.setOnClickListener(this);
-        watchers = new Vector<>();
+        watchers = new ArrayList<>();
 
+        dbHelper = new DBHelper(this);
+        dbHelper.getAllURLs().forEach(this::addWatcher);
     }
 
     private void createNotificationChannel() {
@@ -72,14 +74,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     public void onClick(View view) {
         String newURL = editorURL.getText().toString();
-        WatchUpdates watcher = new WatchUpdates(newURL);
-        watcher.subscribeOnUpdateContent(evt -> {
-            if (evt.getPropertyName().equalsIgnoreCase("images")) {
-                sendNotification(watcher.getURL());
-            }
-        });
-        watchers.add(watcher);
-        watcher.run();
+        if (dbHelper.insertData(newURL) != -1)
+            addWatcher(newURL);
     }
 
     private void sendNotification(String message) {
@@ -107,4 +103,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         notificationManager.notify(1, builder.build());
     }
 
+    private void addWatcher(String URL) {
+        WatchUpdates watcher = new WatchUpdates(URL);
+        watcher.subscribeOnUpdateContent(evt -> {
+            if (evt.getPropertyName().equalsIgnoreCase(NOTIFY_IMAGES_UPDATE)) {
+                sendNotification(watcher.getURL());
+            }
+        });
+        watchers.add(watcher);
+        watcher.start();
+    }
 }
